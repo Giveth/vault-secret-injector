@@ -61,7 +61,7 @@ async function readSecret() {
 
     // Output only the secret names
     for (const key of Object.keys(secretData)) {
-      console.log(`${key}=*****`);
+      console.log(`${key}=**********`);
     }
 
     // Write the secrets to the .env file
@@ -76,7 +76,7 @@ async function readSecret() {
 
         // Output only the secret names
         for (const key of Object.keys(cachedData)) {
-          console.log(`${key}=*****`);
+          console.log(`${key}=**********`);
         }
 
         // Write the cached secrets to the .env file
@@ -158,7 +158,7 @@ async function checkForUpdates() {
 
         // Output only the secret names
         for (const key of Object.keys(secretData)) {
-          console.log(`${key}=*****`);
+          console.log(`${key}=**********`);
         }
 
         // Write the updated secrets to the .env file
@@ -171,7 +171,7 @@ async function checkForUpdates() {
 
       // Output only the secret names
       for (const key of Object.keys(secretData)) {
-        console.log(`${key}=*****`);
+        console.log(`${key}=**********`);
       }
 
       // Write the secrets to the .env file
