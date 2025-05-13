@@ -59,9 +59,9 @@ async function readSecret() {
     fs.writeFileSync(cacheFilePath, JSON.stringify(secretData, null, 2));
     console.log('Secrets cached successfully.');
 
-    // Output the values in the specified format
-    for (const [key, value] of Object.entries(secretData)) {
-      console.log(`${key}=${value}`);
+    // Output only the secret names
+    for (const key of Object.keys(secretData)) {
+      console.log(`${key}=**********`);
     }
 
     // Write the secrets to the .env file
@@ -74,9 +74,9 @@ async function readSecret() {
       if (fs.existsSync(cacheFilePath)) {
         const cachedData = JSON.parse(fs.readFileSync(cacheFilePath, 'utf-8'));
 
-        // Output the cached values in the specified format
-        for (const [key, value] of Object.entries(cachedData)) {
-          console.log(`${key}=${value}`);
+        // Output only the secret names
+        for (const key of Object.keys(cachedData)) {
+          console.log(`${key}=**********`);
         }
 
         // Write the cached secrets to the .env file
@@ -156,24 +156,22 @@ async function checkForUpdates() {
         fs.writeFileSync(cacheFilePath, JSON.stringify(secretData, null, 2));
         console.log('Secrets cache updated.');
 
-        // Output the updated values in the specified format
-        for (const [key, value] of Object.entries(secretData)) {
-          console.log(`${key}=${value}`);
+        // Output only the secret names
+        for (const key of Object.keys(secretData)) {
+          console.log(`${key}=**********`);
         }
 
         // Write the updated secrets to the .env file
         writeSecretsToFile(secretData);
-      } else {
-        console.log('No changes detected in secret values.');
       }
     } else {
       // Cache the latest known secret values if not already cached
       fs.writeFileSync(cacheFilePath, JSON.stringify(secretData, null, 2));
       console.log('Secrets cached for the first time.');
 
-      // Output the values in the specified format
-      for (const [key, value] of Object.entries(secretData)) {
-        console.log(`${key}=${value}`);
+      // Output only the secret names
+      for (const key of Object.keys(secretData)) {
+        console.log(`${key}=**********`);
       }
 
       // Write the secrets to the .env file
@@ -192,7 +190,6 @@ function keepAlive() {
   const secretsCheckInterval = parseDuration(secretsCheckIntervalString); // Convert to seconds
   const tokenCheckInterval = parseDuration(tokenCheckIntervalString); // Convert to seconds
 
-  console.log(`Secrets will be checked every ${secretsCheckIntervalString}.`);
   console.log(`Token will be checked every ${tokenCheckIntervalString}.`);
 
   // Set interval to check for secrets updates
