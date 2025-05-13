@@ -33,4 +33,4 @@ jobs:
         with:
           context: .
           push: true
-          tags: ghcr.io/giveth/vault-secret-injector:latest
+          tags: ghcr.io/mhmdksh/vault-secret-injector:latest
