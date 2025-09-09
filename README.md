@@ -72,7 +72,7 @@ TARGET_HOST_DIR="./secrets"
 
 # --- Multi-file mode ---
 # Option A: A single comma-separated list
-# VAULT_SECRET_MAPPINGS="service/app1:/secrets/app1.env,service/app2:/secrets/app2.env"
+# VAULT_SECRET_MAPPINGS=service/app1:/secrets/app1.env,service/app2:/secrets/app2.env
 # Option B: Enumerated pairs
 # VAULT_SECRET_PATH_1=service/app1
 # TARGET_HOST_FILE_1=/secrets/app1.env
@@ -99,7 +99,7 @@ Two options are supported (you can use either):
 
 1. VAULT_SECRET_MAPPINGS (comma-separated list)
    Example:
-   - `VAULT_SECRET_MAPPINGS="service/app1:/secrets/app1.env,service/app2:/secrets/app2.env"`
+   - `VAULT_SECRET_MAPPINGS=service/app1:/secrets/app1.env,service/app2:/secrets/app2.env`
 
 2. Enumerated pairs
    Example:

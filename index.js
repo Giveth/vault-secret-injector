@@ -10,14 +10,17 @@ const cacheFilePath = path.resolve(__dirname, '.last.cache.json');
 const secretsFilePath = process.env.SECRETS_FILE_PATH || path.resolve('/secrets', 'secrets.env');
 
 // Multi-mapping support: parse VAULT_SECRET_MAPPINGS if provided
-// Format: VAULT_SECRET_MAPPINGS="path1:/secrets/a.env,path2:/secrets/b.env"
+// Format: VAULT_SECRET_MAPPINGS=path1:/secrets/a.env,path2:/secrets/b.env
 function parseMappings(envStr) {
   if (!envStr) return [];
-  return envStr
+  // Trim and strip a single layer of surrounding quotes if present
+  const cleaned = envStr.trim().replace(/^['"]|['"]$/g, '');
+  return cleaned
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean)
-    .map((pair) => {
+    .map((raw) => {
+      const pair = raw.replace(/^['"]|['"]$/g, '');
       const idx = pair.indexOf(':');
       if (idx === -1) {
         throw new Error(
