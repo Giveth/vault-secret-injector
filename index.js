@@ -9,6 +9,61 @@ require('dotenv').config();
 const cacheFilePath = path.resolve(__dirname, '.last.cache.json');
 const secretsFilePath = process.env.SECRETS_FILE_PATH || path.resolve('/secrets', 'secrets.env');
 
+// Multi-mapping support: parse VAULT_SECRET_MAPPINGS if provided
+// Format: VAULT_SECRET_MAPPINGS="path1:/secrets/a.env,path2:/secrets/b.env"
+function parseMappings(envStr) {
+  if (!envStr) return [];
+  return envStr
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((pair) => {
+      const idx = pair.indexOf(':');
+      if (idx === -1) {
+        throw new Error(
+          `Invalid VAULT_SECRET_MAPPINGS entry: "${pair}". Expected format "vault/secret/path:/secrets/target.env"`
+        );
+      }
+      const secretPath = pair.slice(0, idx).trim();
+      const targetFileRaw = pair.slice(idx + 1).trim();
+      return { secretPath, targetFile: targetFileRaw };
+    });
+}
+
+function getDestPath(targetFile) {
+  if (!targetFile) return secretsFilePath;
+  if (path.isAbsolute(targetFile)) return targetFile;
+  // default to writing under /secrets
+  return path.resolve('/secrets', targetFile);
+}
+
+function getCachePath(secretPath) {
+  const slug = String(secretPath).replace(/[^a-zA-Z0-9_-]+/g, '_');
+  return path.resolve(__dirname, `.last.cache.${slug}.json`);
+}
+
+function parseEnumeratedMappingsFromEnv(env) {
+  const out = [];
+  const regex = /^VAULT_SECRET_PATH_(\d+)$/;
+  for (const [key, value] of Object.entries(env)) {
+    const m = key.match(regex);
+    if (m && value) {
+      const idx = m[1];
+      const tfKey = `TARGET_HOST_FILE_${idx}`;
+      const targetFile = env[tfKey];
+      if (targetFile) {
+        out.push({ secretPath: String(value).trim(), targetFile: String(targetFile).trim() });
+      }
+    }
+  }
+  return out;
+}
+
+const mappingsListVar = parseMappings(process.env.VAULT_SECRET_MAPPINGS);
+const mappingsEnumVar = parseEnumeratedMappingsFromEnv(process.env);
+const mappings = [...mappingsListVar, ...mappingsEnumVar];
+const USING_MULTI_MODE = mappings.length > 0;
+
 // Create a Vault client
 const vaultClient = vault({
   apiVersion: 'v1',
@@ -45,8 +100,62 @@ function parseDuration(duration) {
   return numericValue; // Default to seconds if no unit is provided
 }
 
-// Function to read the secret from Vault
+// Function to read a secret for a specific mapping
+async function readSecretForMapping(secretPath, targetFile) {
+  const kvStore = process.env.VAULT_KV_STORE;
+  const destPath = getDestPath(targetFile);
+  const cachePath = getCachePath(secretPath);
+
+  try {
+    const secret = await vaultClient.read(`${kvStore}/data/${secretPath}`);
+    const secretData = secret.data.data;
+
+    // Cache the latest known secret values for this mapping
+    fs.writeFileSync(cachePath, JSON.stringify(secretData, null, 2));
+    console.log(`Secrets cached successfully for path: ${secretPath}`);
+
+    // Output only the secret names
+    for (const key of Object.keys(secretData)) {
+      console.log(`${key}=**********`);
+    }
+
+    // Write the secrets to the target file
+    writeSecretsToFile(secretData, destPath);
+  } catch (err) {
+    if (err.message.includes('permission denied') || err.message.includes('invalid token')) {
+      console.error(`Authentication Failure for path: ${secretPath}`);
+
+      // Check if there is a cached secret available for this mapping
+      if (fs.existsSync(cachePath)) {
+        const cachedData = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
+
+        // Output only the secret names
+        for (const key of Object.keys(cachedData)) {
+          console.log(`${key}=**********`);
+        }
+
+        // Write the cached secrets to the target file
+        writeSecretsToFile(cachedData, destPath);
+      } else {
+        console.error(`No cached secret values available for path: ${secretPath}`);
+      }
+    } else {
+      console.error(`Error reading secret for path ${secretPath}:`, err.message);
+    }
+  }
+}
+
+// Function to read secrets initially (single or multi mode)
 async function readSecret() {
+  if (USING_MULTI_MODE) {
+    for (const { secretPath, targetFile } of mappings) {
+      // eslint-disable-next-line no-await-in-loop
+      await readSecretForMapping(secretPath, targetFile);
+    }
+    return;
+  }
+
+  // Single-file backward-compatible mode
   const kvStore = process.env.VAULT_KV_STORE;
   const secretPath = process.env.VAULT_SECRET_PATH;
 
@@ -65,7 +174,7 @@ async function readSecret() {
     }
 
     // Write the secrets to the .env file
-    writeSecretsToFile(secretData);
+    writeSecretsToFile(secretData, secretsFilePath);
   } catch (err) {
     if (err.message.includes('permission denied') || err.message.includes('invalid token')) {
       console.error('Authentication Failure');
@@ -80,7 +189,7 @@ async function readSecret() {
         }
 
         // Write the cached secrets to the .env file
-        writeSecretsToFile(cachedData);
+        writeSecretsToFile(cachedData, secretsFilePath);
       } else {
         console.error('No cached secret values available');
       }
@@ -90,19 +199,26 @@ async function readSecret() {
   }
 }
 
-// Function to write secrets to a .env file
-function writeSecretsToFile(secretData) {
+// Function to write secrets to a .env-like file
+function writeSecretsToFile(secretData, destFilePath) {
   const secretLines = Object.entries(secretData).map(([key, value]) => `${key}=${value}`).join('\n');
-  
-  // Create the .env file if it doesn't exist and log the action
-  if (!fs.existsSync(secretsFilePath)) {
-    fs.writeFileSync(secretsFilePath, '');
-    console.log(`Created new secrets file at ${secretsFilePath}`);
+
+  // Ensure destination directory exists
+  const dir = path.dirname(destFilePath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+    console.log(`Created directory for secrets at ${dir}`);
   }
 
-  // Write to the .env file and log the action
-  fs.writeFileSync(secretsFilePath, secretLines);
-  console.log(`Secrets written to ${secretsFilePath}`);
+  // Create the file if it doesn't exist
+  if (!fs.existsSync(destFilePath)) {
+    fs.writeFileSync(destFilePath, '');
+    console.log(`Created new secrets file at ${destFilePath}`);
+  }
+
+  // Write to the file and log the action
+  fs.writeFileSync(destFilePath, secretLines);
+  console.log(`Secrets written to ${destFilePath}`);
 }
 
 // Function to check and renew the Vault token if it is close to expiration
@@ -135,8 +251,65 @@ async function checkToken() {
   }
 }
 
-// Function to periodically check for secret updates
+// Function to check for updates for a specific mapping
+async function checkForUpdatesForMapping(secretPath, targetFile) {
+  const kvStore = process.env.VAULT_KV_STORE;
+  const destPath = getDestPath(targetFile);
+  const cachePath = getCachePath(secretPath);
+
+  try {
+    // Read the secret from the specified path
+    const secret = await vaultClient.read(`${kvStore}/data/${secretPath}`);
+    const secretData = secret.data.data;
+
+    // Check if there are changes in the secret values
+    if (fs.existsSync(cachePath)) {
+      const cachedData = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
+
+      if (JSON.stringify(cachedData) !== JSON.stringify(secretData)) {
+        console.log(`Secret values have changed for path: ${secretPath}`);
+
+        // Update the cache with the latest known secret values
+        fs.writeFileSync(cachePath, JSON.stringify(secretData, null, 2));
+        console.log('Secrets cache updated.');
+
+        // Output only the secret names
+        for (const key of Object.keys(secretData)) {
+          console.log(`${key}=**********`);
+        }
+
+        // Write the updated secrets to the target file
+        writeSecretsToFile(secretData, destPath);
+      }
+    } else {
+      // Cache the latest known secret values if not already cached
+      fs.writeFileSync(cachePath, JSON.stringify(secretData, null, 2));
+      console.log(`Secrets cached for the first time for path: ${secretPath}`);
+
+      // Output only the secret names
+      for (const key of Object.keys(secretData)) {
+        console.log(`${key}=**********`);
+      }
+
+      // Write the secrets to the target file
+      writeSecretsToFile(secretData, destPath);
+    }
+  } catch (err) {
+    console.error(`Error checking for updates for path ${secretPath}:`, err.message);
+  }
+}
+
+// Function to periodically check for secret updates (single or multi)
 async function checkForUpdates() {
+  if (USING_MULTI_MODE) {
+    for (const { secretPath, targetFile } of mappings) {
+      // eslint-disable-next-line no-await-in-loop
+      await checkForUpdatesForMapping(secretPath, targetFile);
+    }
+    return;
+  }
+
+  // Single-file mode
   const kvStore = process.env.VAULT_KV_STORE;
   const secretPath = process.env.VAULT_SECRET_PATH;
 
@@ -162,7 +335,7 @@ async function checkForUpdates() {
         }
 
         // Write the updated secrets to the .env file
-        writeSecretsToFile(secretData);
+        writeSecretsToFile(secretData, secretsFilePath);
       }
     } else {
       // Cache the latest known secret values if not already cached
@@ -175,7 +348,7 @@ async function checkForUpdates() {
       }
 
       // Write the secrets to the .env file
-      writeSecretsToFile(secretData);
+      writeSecretsToFile(secretData, secretsFilePath);
     }
   } catch (err) {
     console.error('Error checking for updates:', err.message);
