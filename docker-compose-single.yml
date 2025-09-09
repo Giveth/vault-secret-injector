@@ -1,6 +1,5 @@
 services:
   vault-injector:
-    platform: linux/amd64
     image: ghcr.io/giveth/vault-secret-injector:latest
     container_name: vault-injector
     restart: always
@@ -8,5 +7,5 @@ services:
       - .env
     volumes:
       - type: bind
-        source: ${TARGET_HOST_DIR}
-        target: /secrets
+        source: ${TARGET_HOST_FILE}
+        target: /secrets/secrets.env

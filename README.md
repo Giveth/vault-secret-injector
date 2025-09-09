@@ -1,9 +1,11 @@
 # The Vault Secret Injector
-A Secret Injector Service that is designed to interact with HashiCorp Vault to securely retrieve and cache secrets. It also manages Vault token renewal to ensure continuous authentication. The application periodically checks for updates in the stored secrets and updates a local .env file, which can be used by other applications for environment configuration.
+A Secret Injector Service that is designed to interact with HashiCorp Vault to securely retrieve and cache secrets. It also manages Vault token renewal to ensure continuous authentication. The application periodically checks for updates in the stored secrets and updates one or more .env files, which can be used by other applications for environment configuration.
 ## Features
 #### Fetch Secrets from Vault:
 1. Retrieves secrets from a specified Vault KV store and caches them locally.
-2. Writes the secrets to a .env file or a custom file specified in the environment.
+2. Writes the secrets to:
+   - A single .env file (single-file mode), or
+   - Multiple .env files using simple mappings (multi-file mode).
 
 #### Token Management and Renewal:
 1. Periodically checks the remaining TTL (Time to Live) of the Vault token and renews it when it is close to expiration.
@@ -60,10 +62,22 @@ VAULT_ENDPOINT=http://127.0.0.1:8200
 VAULT_TOKEN=example-token
 # The Key Value Storne Name
 VAULT_KV_STORE=kv-secret
-# The path for the secret
+# --- Single-file mode (backward compatible) ---
+# The path for the secret (relative to VAULT_KV_STORE)
 VAULT_SECRET_PATH=my-secret
-# The targeted ENV file on the host system
-TARGET_HOST_FILE="./secrets.env"
+# Host directory to bind to /secrets in the container. The injector writes to /secrets/secrets.env by default.
+TARGET_HOST_DIR="./secrets"
+# Optional: override the single target file name (default is /secrets/secrets.env)
+# SECRETS_FILE_PATH=/secrets/custom.env
+
+# --- Multi-file mode ---
+# Option A: A single comma-separated list
+# VAULT_SECRET_MAPPINGS=service/app1:/secrets/app1.env,service/app2:/secrets/app2.env
+# Option B: Enumerated pairs
+# VAULT_SECRET_PATH_1=service/app1
+# TARGET_HOST_FILE_1=/secrets/app1.env
+# VAULT_SECRET_PATH_2=service/app2
+# TARGET_HOST_FILE_2=/secrets/app2.env
 # The Interval in which the injector will check for secrets updates (Note: You can use the time formats: s,m,h,d)
 SECRETS_CHECK_INTERVAL=5s
 # The Interval in which the injector will check if the token is about to expire (Note: You can use the time formats: s,m,h,d)
@@ -71,7 +85,31 @@ TOKEN_CHECK_INTERVAL=12h
 # The minimum threshold in which the token TTL is allowed to be (It should be more than the TOKEN_CHECK_INTERVAL) (Note: You can use the time formats: s,m,h,d)
 TOKEN_RENEW_THRESHOLD=25d
 ```
+### Modes of Operation
+
+### Single-file mode
+- Bind a host directory to `/secrets` in the container using `TARGET_HOST_DIR`.
+- Optionally set `SECRETS_FILE_PATH` to change the file name (default `/secrets/secrets.env`).
+- Set `VAULT_SECRET_PATH` to the secret path relative to `VAULT_KV_STORE`.
+
+### Multi-file mode
+Define one or more mappings from Vault secret paths to destination files under `/secrets`.
+
+Two options are supported (you can use either):
+
+1. VAULT_SECRET_MAPPINGS (comma-separated list)
+   Example:
+   - `VAULT_SECRET_MAPPINGS=service/app1:/secrets/app1.env,service/app2:/secrets/app2.env`
+
+2. Enumerated pairs
+   Example:
+   - `VAULT_SECRET_PATH_1=service/app1`
+   - `TARGET_HOST_FILE_1=/secrets/app1.env`
+   - `VAULT_SECRET_PATH_2=service/app2`
+   - `TARGET_HOST_FILE_2=/secrets/app2.env`
+
+In both cases, ensure `TARGET_HOST_DIR` points to a host directory that will be mounted to `/secrets` inside the container. The injector will create and update the target files under `/secrets`.
+
 ### Start
 ```bash
 docker compose up -d
-```

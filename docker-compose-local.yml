@@ -7,5 +7,5 @@ services:
       - .env
     volumes:
       - type: bind
-        source: ${TARGET_HOST_FILE}
-        target: /secrets/secrets.env
+        source: ${TARGET_HOST_DIR}
+        target: /secrets
