@@ -35,9 +35,23 @@ function parseMappings(envStr) {
 
 function getDestPath(targetFile) {
   if (!targetFile) return secretsFilePath;
-  if (path.isAbsolute(targetFile)) return targetFile;
-  // default to writing under /secrets
-  return path.resolve('/secrets', targetFile);
+
+  let tf = String(targetFile).trim();
+  // Strip a single layer of surrounding quotes
+  tf = tf.replace(/^['"]|['"]$/g, '');
+
+  // Normalize common variants to an absolute /secrets path
+  if (tf.startsWith('/secrets/')) return tf; // already correct
+  if (tf === '/secrets') return path.posix.join('/secrets', 'secrets.env');
+  if (tf.startsWith('secrets/')) return path.posix.join('/secrets', tf.slice('secrets/'.length));
+
+  if (path.isAbsolute(tf)) {
+    // Disallow absolute paths outside /secrets to avoid writing to non-mounted locations
+    throw new Error(`Invalid TARGET_HOST_FILE path: ${tf}. Target files must be under /secrets inside the container.`);
+  }
+
+  // default: relative path => place under /secrets
+  return path.resolve('/secrets', tf);
 }
 
 function getCachePath(secretPath) {
