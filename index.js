@@ -49,9 +49,6 @@ function getDestPath(targetFile) {
 
   if (path.isAbsolute(tf)) {
     // Allow absolute paths outside /secrets - user must ensure proper volume mounts
-    console.warn(
-      `WARNING: Target path "${tf}" is outside /secrets. Ensure this path is properly mounted in your container.`
-    );
     return tf;
   }
 
