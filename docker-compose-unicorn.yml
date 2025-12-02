@@ -1,0 +1,10 @@
+services:
+  vault-injector:
+    image: ghcr.io/giveth/vault-secret-injector:latest
+    container_name: vault-injector
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - /home/gmadmin/unicorn-wallet:/home/gmadmin/unicorn-wallet
+      - /home/gmadmin/unicorn-backend:/home/gmadmin/unicorn-backend
