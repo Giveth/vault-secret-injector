@@ -48,10 +48,11 @@ function getDestPath(targetFile) {
     return path.posix.join("/secrets", tf.slice("secrets/".length));
 
   if (path.isAbsolute(tf)) {
-    // Disallow absolute paths outside /secrets to avoid writing to non-mounted locations
-    throw new Error(
-      `Invalid TARGET_HOST_FILE path: ${tf}. Target files must be under /secrets inside the container.`
+    // Allow absolute paths outside /secrets - user must ensure proper volume mounts
+    console.warn(
+      `WARNING: Target path "${tf}" is outside /secrets. Ensure this path is properly mounted in your container.`
     );
+    return tf;
   }
 
   // default: relative path => place under /secrets
