@@ -1,6 +1,6 @@
 services:
   vault-injector:
-    image: ghcr.io/giveth/vault-secret-injector:latest
+    build: .
     container_name: vault-injector
     restart: always
     env_file:
